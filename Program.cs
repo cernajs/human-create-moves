@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace movesCreate
@@ -7,23 +7,21 @@ namespace movesCreate
     {
         private char[][] grid;
         private Position boxPosition;
-        private int[] directions = new int[] {0, 1, 0, -1, 0};
+        private int[] directions = new int[] { 0, 1, 0, -1, 0 };
 
         public struct Position
         {
-            public int X;
-            public int Y;
+            public readonly int X;
+            public readonly int Y;
+            public readonly int LENGTH;
 
-            public Position(int x, int y)
+            public Position(int x, int y, int length)
             {
                 X = x;
                 Y = y;
+                LENGTH = length;
             }
 
-            public override string ToString()
-            {
-                return $"[{Y},{X}]";
-            }
         }
 
         public struct BoxAndPlayerPosition
@@ -37,70 +35,81 @@ namespace movesCreate
                 this.playerPosition = playerPosition;
             }
 
-            // where the box will be moved along with player. Player will fill in the box spot, box will be moved 1 cell in corresponding direction
+            
             public BoxAndPlayerPosition NextPosition()
+            //kam se pohneme dál při posunu krabice
             {
                 if (boxPosition.X == playerPosition.X)
                 {
                     if (playerPosition.Y < boxPosition.Y)
-                        return new BoxAndPlayerPosition(new Position(boxPosition.X, boxPosition.Y + 1),
-                            new Position(playerPosition.X, playerPosition.Y + 1));
-                    return new BoxAndPlayerPosition(new Position(boxPosition.X, boxPosition.Y - 1),
-                        new Position(playerPosition.X, playerPosition.Y - 1));
+                        return new BoxAndPlayerPosition(new Position(boxPosition.X, boxPosition.Y + 1, 0),
+                            new Position(playerPosition.X, playerPosition.Y + 1, playerPosition.LENGTH + 1));
+                    return new BoxAndPlayerPosition(new Position(boxPosition.X, boxPosition.Y - 1, 0),
+                        new Position(playerPosition.X, playerPosition.Y - 1, playerPosition.LENGTH + 1));
                 }
 
                 if (playerPosition.X < boxPosition.X)
-                    return new BoxAndPlayerPosition(new Position(boxPosition.X + 1, boxPosition.Y),
-                        new Position(playerPosition.X + 1, playerPosition.Y));
-                return new BoxAndPlayerPosition(new Position(boxPosition.X - 1, boxPosition.Y),
-                    new Position(playerPosition.X - 1, playerPosition.Y));
-            }
-
-            public override string ToString()
-            {
-                return $"b:{boxPosition};p:{playerPosition}";
+                    return new BoxAndPlayerPosition(new Position(boxPosition.X + 1, boxPosition.Y, 0),
+                        new Position(playerPosition.X + 1, playerPosition.Y, playerPosition.LENGTH + 1));
+                return new BoxAndPlayerPosition(new Position(boxPosition.X - 1, boxPosition.Y, 0),
+                    new Position(playerPosition.X - 1, playerPosition.Y, playerPosition.LENGTH + 1));
             }
         }
 
-        private bool PlayerCanMove(BoxAndPlayerPosition current, Position target)
+        private int PlayerCanMove(BoxAndPlayerPosition current, Position target)
         {
+            //zjistí jestli se můžeme pohnout z current do targetu.
+
             Queue<Position> queue = new Queue<Position>();
             boxPosition = current.boxPosition;
 
             queue.Enqueue(current.playerPosition);
-            HashSet<Position> visited = new HashSet<Position>();
-            visited.Add(current.playerPosition);
-
+            HashSet<string> visited = new HashSet<string>();
+            var vs = current.playerPosition.X.ToString() + current.playerPosition.Y.ToString();
+           
+            visited.Add(vs);
+            
+            //BFS
             while (queue.Count > 0)
             {
                 Position currPos = queue.Dequeue();
-                if (currPos.Equals(target))
+               
+                int cur_length = currPos.LENGTH;
+                if (AreEqualPositions(currPos,target))
                 {
-                    return true;
+                    //jsme v targetu
+                    return currPos.LENGTH;
                 }
 
                 for (int i = 0; i < 4; i++)
                 {
+                    //projedeme 4 směry kame se můžeme pohnout
                     int newX = currPos.X + directions[i];
                     int newY = currPos.Y + directions[i + 1];
-                    Position newPos = new Position(newX, newY);
+                    Position newPos = new Position(newX, newY, cur_length + 1);
 
                     if (CanMoveTo(newPos, visited))
                     {
-                        visited.Add(newPos);
+                        visited.Add(newPos.X.ToString() + newPos.Y.ToString());
                         queue.Enqueue(newPos);
                     }
                 }
             }
-
-            return false;
+            
+            return -1;
         }
 
-        private bool CanMoveTo(Position pos, HashSet<Position> visited)
+        private bool CanMoveTo(Position pos, HashSet<string> visited)
         {
-            return (IsValidAndEmpty(pos) && !visited.Contains(pos) &&
-                    !pos.Equals(boxPosition));
+            return (IsValidAndEmpty(pos) && !visited.Contains(pos.X.ToString() + pos.Y.ToString()) &&
+                    !AreEqualPositions(pos, boxPosition));
         }
+
+        private bool AreEqualPositions(Position pos1, Position pos2)
+        {
+            return (pos1.X.ToString() + pos1.Y.ToString() == pos2.X.ToString() + pos2.Y.ToString());
+        }
+
 
         private bool IsValidAndEmpty(Position pos)
         {
@@ -118,33 +127,37 @@ namespace movesCreate
             Position playerPosition = FindPlayer(grid);
             Position targetPosition = FindTarget(grid);
 
-            // since we captured box, player, and target positions, we change it to '.' so it would be easier to check whether we can move in a cell
+            // změníme hodnoty na místech boxu, hráče a targetu, abychom se skrz ně mohli pohnout
             grid[boxPosition.Y][boxPosition.X] = '.';
             grid[playerPosition.Y][playerPosition.X] = '.';
             grid[targetPosition.Y][targetPosition.X] = '.';
 
-            int pushes = 0;
+
             Queue<BoxAndPlayerPosition> queue = new Queue<BoxAndPlayerPosition>();
-            HashSet<BoxAndPlayerPosition> visited = new HashSet<BoxAndPlayerPosition>();
+            HashSet<string> visited = new HashSet<string>();
 
             BoxAndPlayerPosition initial = new BoxAndPlayerPosition(boxPosition, playerPosition);
 
-            // adding all possible starting points: box and positions to the left, right, top, bottom to the box.
+
+            // přidáme všechny možnosti : box a hráč - vleve,vpravo,nahoře,dole
             for (int i = 0; i < 4; i++)
             {
+
                 int newX = boxPosition.X + directions[i];
                 int newY = boxPosition.Y + directions[i + 1];
-                Position target = new Position(newX, newY);
+                int first_len = PlayerCanMove(initial, new Position(newX, newY,0)); //vzdálenost z původního místa skladníka k boxu
+                Position target = new Position(newX, newY, first_len);
 
-                if (!IsValidAndEmpty(target) || !PlayerCanMove(initial, target))
+
+                if (!IsValidAndEmpty(target) || PlayerCanMove(initial, target) == -1)
                     continue;
 
                 var start = new BoxAndPlayerPosition(boxPosition, target);
                 queue.Enqueue(start);
-                visited.Add(start);
+                visited.Add(start.playerPosition.X.ToString() + start.playerPosition.Y.ToString() + start.boxPosition.X.ToString() + start.boxPosition.Y.ToString());
             }
 
-            // BFS for player and the box
+           //BFS
             while (queue.Count > 0)
             {
                 var length = queue.Count;
@@ -152,41 +165,47 @@ namespace movesCreate
                 for (int j = 0; j < length; j++)
                 {
                     BoxAndPlayerPosition current = queue.Dequeue();
-                    if (current.boxPosition.Equals(targetPosition))
-                        return pushes;
+                    
+                    if (AreEqualPositions(current.boxPosition, targetPosition))
+                        //kontrola jestli jsme v cíli
+                        return current.playerPosition.LENGTH;
 
                     var next = current.NextPosition();
                     var nextBox = next.boxPosition;
 
-                    if (!visited.Contains(next) && IsValidAndEmpty(nextBox))
+                    if (!visited.Contains(next.playerPosition.X.ToString() + next.playerPosition.Y.ToString() + next.boxPosition.X.ToString() + next.boxPosition.Y.ToString()) && IsValidAndEmpty(nextBox))
                     {
+                        //next(pozici při púosunutí krabice) jsme ještě nenavštívili
                         queue.Enqueue(next);
-                        visited.Add(next);
-
-                        // when we add another position 'next' for the player and the box, we need to try to add all possible positions for the player if the box is fixed. So whenever we move the box, always add all positions for the player as well around the box to the queue.
+                        visited.Add(next.playerPosition.X.ToString() + next.playerPosition.Y.ToString() + next.boxPosition.X.ToString() + next.boxPosition.Y.ToString());
+                        
                         for (int i = 0; i < 4; i++)
                         {
+                            //pro každou pozici boxu přidáme 4 pozice boxu
+                            
                             int newX = nextBox.X + directions[i];
                             int newY = nextBox.Y + directions[i + 1];
-                            Position newPosition = new Position(newX, newY);
+                            Position newPosition = new Position(newX, newY,current.playerPosition.LENGTH+ PlayerCanMove(current, new Position(newX, newY, 0)));
+                            //nová pozice, ke vzdálenosti musíme připočíst BFS mezi current a newX, newY -> můžou zde být překážky
+
 
                             if (!next.playerPosition.Equals(newPosition) && IsValidAndEmpty(newPosition) &&
-                                PlayerCanMove(next, newPosition))
+                                PlayerCanMove(next, newPosition) != -1)
                             {
+                                
                                 var start = new BoxAndPlayerPosition(nextBox, newPosition);
-                                if (!visited.Contains(start))
+                                if (!visited.Contains(start.playerPosition.X.ToString() + start.playerPosition.Y.ToString() + start.boxPosition.X.ToString() + start.boxPosition.Y.ToString()))
                                 {
                                     queue.Enqueue(start);
-                                    visited.Add(start);
+                                    visited.Add(start.playerPosition.X.ToString() + start.playerPosition.Y.ToString() + start.boxPosition.X.ToString() + start.boxPosition.Y.ToString());
                                 }
                             }
                         }
                     }
                 }
 
-                pushes++;
             }
-
+            //cesta neexistuje
             return -1;
         }
 
@@ -202,32 +221,34 @@ namespace movesCreate
 
         private Position FindTarget(char[][] grid)
         {
-            return Find(grid, 'T');
+            return Find(grid, 'C');
         }
 
         private Position Find(char[][] grid, char c)
         {
             for (int i = 0; i < grid.Length; i++)
-            for (int j = 0; j < grid[0].Length; j++)
-                if (grid[i][j] == c)
-                    return new Position(j, i);
+                for (int j = 0; j < grid[0].Length; j++)
+                    if (grid[i][j] == c)
+                        return new Position(j, i,0);
 
             throw new Exception();
         }
 
-        void Main(string[] args)
+        static void Main(string[] args)
         {
 
             char[][] grid = new char[][]
             {
                 new char[] {'#', '#', '#', '#', '#', '#'},
-                new char[] {'#', 'T', '#', '#', '#', '#'},
-                new char[] {'#', '.', '.', 'B', '.', '#'},
+                new char[] {'#', 'C', '#', '#', '#', '#'},
+                new char[] {'#', '.', 'B', '.', '.', '#'},
                 new char[] {'#', '.', '#', '#', '.', '#'},
                 new char[] {'#', '.', '.', '.', 'S', '#'},
                 new char[] {'#', '#', '#', '#', '#', '#'},
             };
-            Console.WriteLine(MinPushBox(grid));
+            //Console.WriteLine(MinPushBox(grid));
+            Program program = new Program();
+            Console.WriteLine(program.MinPushBox(grid));
         }
     }
 }
